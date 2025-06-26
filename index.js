@@ -12,15 +12,21 @@ app.use(express.json());
 
 const db = mysql.createConnection(process.env.DATABASE_URL);
 
-db.query(
-  `CREATE TABLE IF NOT EXISTS usersform (
+function handleTablesError(err, results) {
+  if (err) {
+    console.error("Something went wrong:", err);
+  } else {
+    console.log("Table created successfully or already exists.");
+  }
+}
+
+const createUsersForm =  `CREATE TABLE IF NOT EXISTS usersform (
      id INT AUTO_INCREMENT PRIMARY KEY,
      name VARCHAR(255) NOT NULL,
      email VARCHAR(255) NOT NULL UNIQUE,
      password VARCHAR(255) NOT NULL
-   );
-   
-   CREATE TABLE IF NOT EXISTS templates (
+   );`;
+const createTemplates = `CREATE TABLE IF NOT EXISTS templates (
      id INT AUTO_INCREMENT PRIMARY KEY,
      title VARCHAR(255),
      description TEXT,
@@ -29,24 +35,19 @@ db.query(
      labels JSON,
      questions JSON,
      authorName VARCHAR(255)
-   );
-
-   CREATE TABLE IF NOT EXISTS responses (
+   );`;
+const createResponses = `CREATE TABLE IF NOT EXISTS responses (
      id INT AUTO_INCREMENT PRIMARY KEY,
      userId INT,
      templateId INT,
      answers JSON,
      FOREIGN KEY (userId) REFERENCES usersform(id),
      FOREIGN KEY (templateId) REFERENCES templates(id)
-   );`,
-  (err) => {
-    if (err) {
-      console.error("Error creating table:", err);
-    } else {
-      console.log("Table 'usersform' created or already exists.");
-    }
-  }
-);
+   );`;
+
+db.query(createUsersForm, handleTablesError);
+db.query(createTemplates, handleTablesError);
+db.query(createResponses, handleTablesError);
 
 app.post("/signup", async (req, res) => {
   const { name, email, password } = req.body;
