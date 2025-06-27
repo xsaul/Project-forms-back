@@ -163,6 +163,7 @@ app.get("/getTemplates", async (req, res) => {
 });
 
 app.post("/registerAnswers", async (req, res) => {
+  const { userId, templateId, answers } = req.body;
   if (!userId || !templateId || !answers) {
     return res.status(400).json({ message: "The template information is not complete" });
   }
