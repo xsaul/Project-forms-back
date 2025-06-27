@@ -12,19 +12,6 @@ app.use(express.json());
 
 const db = mysql.createConnection(process.env.DATABASE_URL);
 
-db.query(
-  `ALTER TABLE usersform
-   ADD COLUMN userType VARCHAR(255) NOT NULL DEFAULT 'Regular';`,
-  (err) => {
-    if (err) {
-      console.error("Error adding userType column:", err);
-    } else {
-      console.log("userType column added successfully.");
-    }
-  }
-);
-
-
 function handleTablesError(err, results) {
   if (err) {
     console.error("Something went wrong:", err);
@@ -37,7 +24,8 @@ const createUsersForm =  `CREATE TABLE IF NOT EXISTS usersform (
      id INT AUTO_INCREMENT PRIMARY KEY,
      name VARCHAR(255) NOT NULL,
      email VARCHAR(255) NOT NULL UNIQUE,
-     password VARCHAR(255) NOT NULL
+     password VARCHAR(255) NOT NULL,
+     userType VARCHAR(255) NOT NULL DEFAULT 'Regular'
    );`;
 const createTemplates = `CREATE TABLE IF NOT EXISTS templates (
      id INT AUTO_INCREMENT PRIMARY KEY,
