@@ -12,6 +12,19 @@ app.use(express.json());
 
 const db = mysql.createConnection(process.env.DATABASE_URL);
 
+db.query(
+  `ALTER TABLE usersform
+   ADD COLUMN userType VARCHAR(255) NOT NULL DEFAULT 'Regular';`,
+  (err) => {
+    if (err) {
+      console.error("Error adding userType column:", err);
+    } else {
+      console.log("userType column added successfully.");
+    }
+  }
+);
+
+
 function handleTablesError(err, results) {
   if (err) {
     console.error("Something went wrong:", err);
