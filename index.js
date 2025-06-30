@@ -3,6 +3,7 @@ import mysql from "mysql2";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
+import { Sequelize, DataTypes } from 'sequelize';
 
 
 dotenv.config();
@@ -10,76 +11,59 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const db = mysql.createConnection(process.env.DATABASE_URL);
+// const db = mysql.createConnection(process.env.DATABASE_URL);
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
+  dialect: 'mysql'
+});
 
-function handleTablesError(err, results) {
-  if (err) {
-    console.error("Something went wrong:", err);
-  } else {
-    console.log("Table created successfully or already exists.");
-  }
-}
+const User = sequelize.define('User', {
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+  },
+  password: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  userType: {
+    type: DataTypes.STRING,
+    defaultValue: 'Regular', 
+  },
+}, {
+  tableName: 'usersform',
+});
 
-const createUsersForm =  `CREATE TABLE IF NOT EXISTS usersform (
-     id INT AUTO_INCREMENT PRIMARY KEY,
-     name VARCHAR(255) NOT NULL,
-     email VARCHAR(255) NOT NULL UNIQUE,
-     password VARCHAR(255) NOT NULL,
-     userType VARCHAR(255) NOT NULL DEFAULT 'Regular'
-   );`;
-const createTemplates = `CREATE TABLE IF NOT EXISTS templates (
-     id INT AUTO_INCREMENT PRIMARY KEY,
-     title VARCHAR(255),
-     description TEXT,
-     topic VARCHAR(255),
-     isPublic TINYINT(1),
-     labels JSON,
-     questions JSON,
-     authorName VARCHAR(255)
-   );`;
-const createResponses = `CREATE TABLE IF NOT EXISTS responses (
-     id INT AUTO_INCREMENT PRIMARY KEY,
-     userId INT,
-     templateId INT,
-     answers JSON,
-     FOREIGN KEY (userId) REFERENCES usersform(id),
-     FOREIGN KEY (templateId) REFERENCES templates(id)
-   );`;
-
-db.query(createUsersForm, handleTablesError);
-db.query(createTemplates, handleTablesError);
-db.query(createResponses, handleTablesError);
 
 app.post("/signup", async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
-    return res.status(400).json({ message: "Email and Password required" });
+    return res.status(400).json({ message: "User information is required" });
   }
-  
-  const hashedPassword = await bcrypt.hash(password, 10);
 
-  db.query(
-  "INSERT INTO usersform (name, email, password) VALUES (?, ?, ?)",
-  [name, email, hashedPassword],
-  (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = await User.create({
+      name,
+      email,
+      password: hashedPassword,
+    });
 
-    db.query(
-      "SELECT id, userType FROM usersform WHERE id = ?",
-      [result.insertId],
-      (err, userResult) => {
-        if (err) return res.status(500).json({ error: err.message });
+    res.json({
+      message: "User registered successfully!",
+      userId: newUser.id,
+      userType: newUser.userType,
+      name: newUser.name,
+    });
 
-        res.json({
-          message: "User registered successfully!",
-          userId: userResult[0].id,
-          userType: userResult[0].userType,
-          name: name,
-        });
-      }
-    );
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ error: err.message });
   }
-);
 });
 
 app.post("/login", async (req, res) => {
@@ -87,18 +71,28 @@ app.post("/login", async (req, res) => {
   if (!email || !password) {
     return res.status(400).json({ message: "Email and Password required" });
   }
-  db.query("SELECT * FROM usersform WHERE email = ?", [email], async (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (result.length === 0) {
+  try {
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
       return res.status(401).json({ message: "User not found" });
     }
-    const user = result[0];
+
     const isValidPassword = await bcrypt.compare(password, user.password);
+
     if (!isValidPassword) {
       return res.status(401).json({ message: "Invalid password" });
     }
-    res.json({ message: "Login successful!", userId: user.id, name: user.name, userType: user.userType });
-  });
+
+    res.json({
+      message: "Login successful!",
+      userId: user.id,
+      name: user.name,
+      userType: user.userType,
+    });
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post("/registerTemplate", async (req, res) => {
@@ -240,4 +234,12 @@ app.post("/editAnswers", (req, res) => {
 });
 
 const PORT = process.env.PORT || 3306;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, async () => {
+  try {
+    await sequelize.authenticate();
+    console.log("Database connection established successfully.");
+  } catch (error) {
+    console.error("Unable to connect to the database:", error);
+  }
+  console.log(`Server is running on port ${PORT}`);
+})
