@@ -39,6 +39,58 @@ const User = sequelize.define('User', {
   timestamps: false,
 });
 
+const Template = sequelize.define('Template', {
+  title: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  description: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+  },
+  topic: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  isPublic: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+  },
+  labels: {
+    type: DataTypes.JSON,
+    allowNull: false,
+  },
+  questions: {
+    type: DataTypes.JSON,
+    allowNull: false,
+  },
+  authorName: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+}, {
+  tableName: 'templates',
+  timestamps: false,
+});
+
+const Response = sequelize.define('Response', {
+  userId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
+  templateId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
+  answers: {
+    type: DataTypes.JSON,
+    allowNull: false,
+  },
+}, {
+  tableName: 'responses',
+  timestamps: false,
+});
+
 
 app.post("/signup", async (req, res) => {
   const { name, email, password } = req.body;
@@ -101,60 +153,51 @@ app.post("/registerTemplate", async (req, res) => {
   if (!title || !description || !topic || typeof isPublic !== "boolean" || !labels || !questions || !authorName) {
     return res.status(400).json({ message: "The template information is not complete" });
   }
-
-  const stringifiedLabels = JSON.stringify(labels);
-  const stringifiedQuestions = JSON.stringify(questions);
-
-  db.query(
-  "INSERT INTO templates (title, description, topic, isPublic, labels, questions, authorName) VALUES (?, ?, ?, ?, ?, ?, ?)",
-  [title, description, topic, isPublic, stringifiedLabels, stringifiedQuestions, authorName],
-  (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
+  try {
+    await Template.create({
+      title,
+      description,
+      topic,
+      isPublic,
+      labels,     
+      questions,  
+      authorName,
+    });
 
     res.status(201).json({ message: "Template saved successfully" });
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ error: err.message });
   }
-);
 });
 
-function safeParse(value) {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}
 
 app.get("/getTemplates", async (req, res) => {
-  db.query("SELECT * FROM templates", (err, results) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (results.length === 0) {
+  try {
+    const templates = await Template.findAll();
+    if (!templates || templates.length === 0) {
       return res.status(404).json({ message: "No templates found" });
     }
-    const templates = results.map(template => ({
-      ...template,
-      labels: safeParse(template.labels),
-  questions: safeParse(template.questions)
-    }));
-    res.json(templates);
-  });});
+    res.json(templates); 
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
   app.get("/templates/:id", async (req, res) => {
   const { id } = req.params;
-  db.query("SELECT * FROM templates WHERE id = ?", [id], (err, result) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
+  try {
+    const template = await Template.findOne({ where: { id } });
+    if (!template) {
+      return res.status(404).json({ message: "Template not found" });
     }
-    if (!result) {
-      return res.status(404).json({ message: "No template data found" });
-    }
-    const template = result[0];
-    const parsedTemplate = {
-      ...template,
-      labels: safeParse(template.labels),
-      questions: safeParse(template.questions)
-    };
-    res.json(parsedTemplate);
-  });
+    res.json(template);
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post("/registerAnswers", async (req, res) => {
@@ -162,76 +205,60 @@ app.post("/registerAnswers", async (req, res) => {
   if (!userId || !templateId || !answers) {
     return res.status(400).json({ message: "The template information is not complete" });
   }
-  const stringifiedAnswers = JSON.stringify(answers);
-  db.query(
-  "INSERT INTO responses (userId, templateId, answers) VALUES (?, ?, ?)",
-  [userId, templateId, stringifiedAnswers],
-  (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
-
+  try {
+    await Response.create({
+      userId,
+      templateId,
+      answers,
+    });
     res.status(201).json({ message: "Answers saved successfully" });
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ error: err.message });
   }
-);
 });
 
-app.get("/userResponse", (req, res) => {
+app.get("/userResponse", async (req, res) => {
   const { userId, templateId } = req.query;
   if (!userId || !templateId) {
     return res.status(400).json({ message: "Missing parameters" });
   }
-  db.query(
-    "SELECT answers FROM responses WHERE userId = ? AND templateId = ?",
-    [userId, templateId],
-    (err, results) => {
-      if (err) {
-        console.error("DB error:", err.message);
-        return res.status(500).json({ message: "Server error", error: err.message });
-      }
-      if (results.length === 0) {
-        return res.status(204).send();
-      }
-      try {
-        return res.json(results[0].answers);
-      } catch (parseErr) {
-        console.error("JSON parse error:", parseErr.message);
-        return res.status(500).json({ message: "Invalid JSON stored in answers" });
-      }
+  try {
+    const response = await Response.findOne({ where: { userId, templateId } });
+    if (!response) {
+      return res.status(204).send();
     }
-  );
+    res.json(response.answers);
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
 });
 
-app.post("/editAnswers", (req, res) => {
+app.post("/editAnswers", async (req, res) => {
   const { userId, templateId, answers } = req.body;
   if (!userId || !templateId || !answers) {
     return res.status(400).json({ message: "Incomplete request body" });
   }
-  db.query(
-    "SELECT answers FROM responses WHERE userId = ? AND templateId = ?",
-    [userId, templateId],
-    (err, results) => {
-      if (err) {
-        console.error("DB fetch error:", err.message);
-        return res.status(500).json({ message: "Server error" });
-      }
-      if (results.length === 0) {
-        return res.status(404).json({ message: "Response not found" });
-      }
-      const currentAnswers = results[0].answers;
-      const updatedAnswers = { ...currentAnswers, ...answers };
-      const stringifiedAnswers = JSON.stringify(updatedAnswers);
-      db.query(
-        "UPDATE responses SET answers = ? WHERE userId = ? AND templateId = ?",
-        [stringifiedAnswers, userId, templateId],
-        (updateErr) => {
-          if (updateErr) {
-            console.error("Update error:", updateErr.message);
-            return res.status(500).json({ message: "Update failed" });
-          }
-          res.json({ message: "Answers updated successfully" });
-        }
-      );
+  try {
+    const response = await Response.findOne({ where: { userId, templateId } });
+    if (!response) {
+      return res.status(404).json({ message: "Response not found" });
     }
-  );
+
+    const updatedAnswers = {
+      ...response.answers, 
+      ...answers,
+    };
+
+    response.answers = updatedAnswers;
+    await response.save();
+
+    res.json({ message: "Answers updated successfully" });
+  } catch (err) {
+    console.error("Update error:", err);
+    res.status(500).json({ message: "Update failed", error: err.message });
+  }
 });
 
 const PORT = process.env.PORT || 3306;
