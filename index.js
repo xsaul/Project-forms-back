@@ -261,6 +261,29 @@ app.post("/editAnswers", async (req, res) => {
   }
 });
 
+app.post("/editTemplateQuestions", async (req, res) => {
+  const { templateId, authorName, questions } = req.body;
+  if (!templateId || !authorName || !questions) {
+    return res.status(400).json({ message: "Incomplete request body" });
+  }
+  try {
+    const template = await Template.findOne({
+      where: { id: templateId, authorName },
+    });
+    if (!template) {
+      return res.status(403).json({ message: "Template not found" });
+    }
+
+    template.questions = questions;
+    await template.save();
+
+    res.json({ message: "Questions updated successfully" });
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ message: "Update failed", error: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 3306;
 app.listen(PORT, async () => {
   try {
